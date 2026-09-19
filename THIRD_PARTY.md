@@ -7,7 +7,7 @@ PlatformIO actually installed, not from memory.
 
 | Library | Used for | Licence |
 |---|---|---|
-| [M5Cardputer](https://github.com/m5stack/M5Cardputer) | Board support: display, keyboard, power | MIT (no LICENSE file shipped in the package; MIT per the project) |
+| [M5Cardputer](https://github.com/m5stack/M5Cardputer) | Board support: display, keyboard, power | **Unconfirmed** (no LICENSE file shipped, GitHub reports no detected licence, and the project's own README states MIT only for its M5GFX/M5Unified dependencies -- not for itself) |
 | [M5Unified](https://github.com/m5stack/M5Unified) | M5Stack hardware abstraction, IMU | MIT |
 | [M5GFX](https://github.com/m5stack/M5GFX) | Display driver and canvas | MIT |
 | [TinyGPSPlus](https://github.com/mikalhart/TinyGPSPlus) | NMEA parsing | **See note below** |
@@ -18,11 +18,29 @@ PlatformIO actually installed, not from memory.
 
 Plus the Espressif Arduino core / ESP-IDF, under their respective licences.
 
-## Notes on the copyleft dependencies
+**IRremote** also appears under PlatformIO's installed libraries because
+M5Cardputer's own `library.json` lists it as a dependency, but nothing in
+this project's source, and nothing in M5Cardputer's own core source (only
+one of its example sketches), includes it -- the build's dependency graph
+never pulls it in, and no `IRremote` object files are produced by the
+actual firmware build. It is a leftover/transitive install, not something
+this firmware ships, so it is intentionally left out of the table above.
 
-**TinyGPSPlus** ships no LICENSE file in the PlatformIO package. It is
-commonly described as LGPL-2.1. That has not been verified against the
-upstream repository, so treat it as unconfirmed rather than settled.
+## Notes on uncertain and copyleft licences
+
+**TinyGPSPlus** ships no LICENSE file in the PlatformIO package, and GitHub's
+own licence detector reports none for the upstream repository either. The
+library's source files themselves (`TinyGPS++.h`, `TinyGPS++.cpp`,
+`TinyGPSPlus.h`) each carry a header stating it is free software under "the
+GNU Lesser General Public License ... version 2.1 of the License, or (at your
+option) any later version" -- so LGPL-2.1-or-later is what the code itself
+claims, even though there is no standalone LICENSE file to point to.
+
+**M5Cardputer** is in the same position but with less to go on: no LICENSE
+file in the package, no licence field on the GitHub repository, and no
+licence statement for itself anywhere in its own README (which lists MIT
+only for its M5GFX and M5Unified dependencies). Treat its licence as
+unconfirmed rather than assuming MIT because its M5Stack siblings are MIT.
 
 **ESPAsyncWebServer and AsyncTCP are LGPL-3.0.** Statically linking LGPL
 code into a firmware image — which is what an ESP32 build does — normally
