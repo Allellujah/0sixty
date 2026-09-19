@@ -2,6 +2,11 @@
 
 *by Allelujah*
 
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+![Platform: ESP32-S3](https://img.shields.io/badge/Platform-ESP32--S3-informational)
+![Framework: Arduino / PlatformIO](https://img.shields.io/badge/Framework-Arduino%20%2F%20PlatformIO-informational)
+![Device: M5Stack Cardputer ADV](https://img.shields.io/badge/Device-Cardputer%20ADV-orange)
+
 GPS performance ("0-60"/quarter-mile) and long-drive trip tracker firmware
 for an M5Stack Cardputer ADV + LoRa1262 Cap (used only for its onboard GNSS
 chip, ATGM336H-6N@AT6668 -- the SX1262 LoRa radio is unused).
@@ -14,6 +19,31 @@ Two modes (never simultaneous), switched with a key or a dashboard button:
 
 Design notes and the reasoning behind each change live in `CHANGELOG.md`;
 `MANUAL.md` covers day-to-day use.
+
+## Repository layout
+
+```
+include/config.h     All tunables in one place: pin assignments, thresholds,
+                     speed bands, firmware version, author signature
+src/
+  main.cpp           Setup + main loop, keyboard handling, mode dispatch
+  gps.{h,cpp}        NMEA parsing, fix and UTC date/time
+  imu.{h,cpp}        Accelerometer fusion, launch detection, hard events
+  timeutil.{h,cpp}   GPS-derived wall clock, timezone/DST, timestamp formats
+  display.{h,cpp}    All on-device screens (240x135), drawn via an offscreen canvas
+  storage.{h,cpp}    SD card: trip/run files, history listing, mutex-guarded
+  webserver.{h,cpp}  WiFi AP, captive portal, dashboard, CSV/KML/report exports
+  settings.{h,cpp}   NVS-backed preferences and counters
+  sync.{h,cpp}       Optional home-WiFi auto-upload (experimental)
+  theme.{h,cpp}      Colour themes
+  units.{h,cpp}      km/h <-> mph conversion
+  modes/
+    performance.*    0-60 / quarter-mile / rolling-split state machine
+    trip.*           Route logging, auto start/stop, hard-event markers
+tools/
+  make_app_bin.sh    Versioned app-only image (for Launcher sideload)
+  merge_bin.sh       Versioned single-file image (for direct esptool flash)
+```
 
 ## Status
 
@@ -357,3 +387,37 @@ the esptool command used).
   the buffer only stops the recorded track (and so the KML/CSV export's
   resolution) from growing further -- live distance/duration/max-speed
   stats keep updating for the rest of the drive either way.
+
+## Licence
+
+MIT — see [`LICENSE`](LICENSE). Bundled third-party libraries carry their own
+licences, including two that are LGPL-3.0; see [`THIRD_PARTY.md`](THIRD_PARTY.md)
+for the full list and what that means if you redistribute a compiled binary.
+
+## Responsible use, and what this data contains
+
+**This is a hobby project, provided as is, with no warranty of any kind.**
+
+**Don't trust the numbers without checking them.** The speed, split and
+distance figures come from consumer GNSS and a small accelerometer. They are
+good enough to be interesting and are not calibrated instrumentation. At the
+time of writing, no 0-60 figure this firmware has produced has been verified
+against a known-good reference. Don't use it for anything that matters —
+scrutineering, disputes, or any safety-related decision.
+
+**Don't operate it while driving.** Set a name, pick a mode and start the
+recording before you move. Both modes are designed to run unattended for
+exactly this reason: Trip mode starts and stops itself, and Performance mode
+arms and triggers itself with no button to press mid-run. Obey speed limits
+and drive within the law — a lap timer is not a licence to use a public road
+as a test track.
+
+**Your recordings are precise location data.** Every trip file and every
+KML/CSV export contains a detailed trace of where the device has been —
+including, in practice, where you live, where you work and when you were
+there. The exports are plain text and carry no protection whatsoever.
+
+Before sharing one — in a bug report, a forum post, a release asset, or a
+screenshot of a map — check what it actually reveals. A screenshot exposes
+only what's in the frame; the underlying file exposes every coordinate in
+the recording, both ends of the journey included.
