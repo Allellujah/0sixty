@@ -4,6 +4,7 @@
 #include <M5GFX.h>
 #include "modes/performance.h"
 #include "modes/trip.h"
+#include "settings.h" // StartMode, for showSettingsMenu()
 
 // UX pass (2026-09-16): everything draws into an offscreen M5Canvas sprite
 // and is pushed to the panel in one go -- the previous per-frame
@@ -50,6 +51,11 @@ public:
 	// normal single-key actions -- otherwise typing a name containing "m"
 	// would switch modes mid-word.
 	void showNameEntry(const char *title, const String &buffer);
+
+	// v1.5.0: the Settings menu (S key) -- a numbered list of start-mode
+	// toggles. See main.cpp's settingsMenuActive handling for the 1/2/`
+	// keys that drive it.
+	void showSettingsMenu(StartMode perfStartMode, StartMode tripStartMode);
 
 private:
 	M5Canvas _canvas;

@@ -113,6 +113,17 @@ void TripMode::setName(const String &name) {
 	}
 }
 
+void TripMode::requestManualToggle(uint32_t nowMs) {
+	if (_state == TripState::IDLE) {
+		startRecording(nowMs);
+	} else if (_state == TripState::RECORDING) {
+		stopRecording();
+	}
+	// SUMMARY: deliberately a no-op -- reset() (the X key) is the existing,
+	// already-wired way to dismiss a summary and go IDLE; adding a second
+	// path here would just be two ways to do the same thing.
+}
+
 void TripMode::logEvent(uint32_t nowMs, double lat, double lng, float deviationG) {
 	if (_state != TripState::RECORDING) return;
 	if (_eventCount < TRIP_MAX_EVENTS) {
@@ -125,6 +136,10 @@ void TripMode::update(bool hasFix, double lat, double lng, float speedKmh, float
 	if (!hasFix) return;
 
 	// --- auto start/stop, runs regardless of current state ---
+	// v1.5.0: only evaluated in AUTO start mode -- in MANUAL, starting/
+	// stopping only happens via requestManualToggle() (the 'A' key /
+	// dashboard button). Still track the hold timers either way so
+	// switching back to AUTO doesn't have to wait out a full fresh hold.
 	bool aboveStart = speedKmh >= AUTO_TRIP_START_SPEED_KMH;
 	bool belowStop = speedKmh <= AUTO_TRIP_STOP_SPEED_KMH;
 	if (aboveStart) {
@@ -138,14 +153,16 @@ void TripMode::update(bool hasFix, double lat, double lng, float speedKmh, float
 		_speedBelowStopSinceMs = 0;
 	}
 
-	if (_state == TripState::IDLE) {
-		if (_speedAboveStartSinceMs != 0 && (nowMs - _speedAboveStartSinceMs) >= AUTO_TRIP_START_HOLD_MS) {
-			startRecording(nowMs);
-		}
-	} else if (_state == TripState::RECORDING) {
-		if (_speedBelowStopSinceMs != 0 && (nowMs - _speedBelowStopSinceMs) >= AUTO_TRIP_STOP_HOLD_MS) {
-			stopRecording();
-			return; // just stopped this call -- don't also record a point below
+	if (Settings::tripStartMode() == StartMode::AUTO) {
+		if (_state == TripState::IDLE) {
+			if (_speedAboveStartSinceMs != 0 && (nowMs - _speedAboveStartSinceMs) >= AUTO_TRIP_START_HOLD_MS) {
+				startRecording(nowMs);
+			}
+		} else if (_state == TripState::RECORDING) {
+			if (_speedBelowStopSinceMs != 0 && (nowMs - _speedBelowStopSinceMs) >= AUTO_TRIP_STOP_HOLD_MS) {
+				stopRecording();
+				return; // just stopped this call -- don't also record a point below
+			}
 		}
 	}
 

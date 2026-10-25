@@ -5,6 +5,8 @@ static Preferences _prefs;
 
 ThemeColor Settings::_theme = ThemeColor::GREEN;
 AppMode Settings::_mode = AppMode::PERFORMANCE;
+StartMode Settings::_perfStartMode = StartMode::AUTO;
+StartMode Settings::_tripStartMode = StartMode::AUTO;
 String Settings::_pendingTripName = "";
 String Settings::_pendingRunName = "";
 String Settings::_homeSsid = "";
@@ -17,6 +19,8 @@ void Settings::begin() {
 	_prefs.begin(SETTINGS_NAMESPACE, /*readOnly=*/false);
 	_theme = (ThemeColor)_prefs.getUChar("theme", (uint8_t)ThemeColor::GREEN);
 	_mode = (AppMode)_prefs.getUChar("mode", (uint8_t)AppMode::PERFORMANCE);
+	_perfStartMode = (StartMode)_prefs.getUChar("perfStart", (uint8_t)StartMode::AUTO);
+	_tripStartMode = (StartMode)_prefs.getUChar("tripStart", (uint8_t)StartMode::AUTO);
 	Units::active = (SpeedUnit)_prefs.getUChar("unit", (uint8_t)SpeedUnit::KMH);
 	_homeSsid = _prefs.getString("homeSsid", "");
 	_homePassword = _prefs.getString("homePass", "");
@@ -36,6 +40,16 @@ void Settings::setMode(AppMode m) {
 void Settings::toggleUnit() {
 	Units::toggle();
 	_prefs.putUChar("unit", (uint8_t)Units::active);
+}
+
+void Settings::setPerfStartMode(StartMode m) {
+	_perfStartMode = m;
+	_prefs.putUChar("perfStart", (uint8_t)m);
+}
+
+void Settings::setTripStartMode(StartMode m) {
+	_tripStartMode = m;
+	_prefs.putUChar("tripStart", (uint8_t)m);
 }
 
 uint32_t Settings::nextTripId() {

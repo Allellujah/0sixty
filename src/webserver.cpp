@@ -74,6 +74,7 @@ static const char DASHBOARD_HTML[] PROGMEM = R"HTML(
   <span class="pill" id="statePill">WAIT</span>
   <span class="pill" id="connPill">connecting...</span>
   <button id="modeBtn">Switch to Trip</button>
+  <button id="armBtn">Arm</button>
 </div>
 <div class="speed"><span id="speed">0.0</span><span class="speed-unit"> km/h</span></div>
 <canvas id="graph" width="600" height="150"></canvas>
@@ -88,6 +89,10 @@ static const char DASHBOARD_HTML[] PROGMEM = R"HTML(
     <div class="tile"><div class="v" id="quarterMile">--</div><div class="l">1/4 MILE</div></div>
     <div class="tile"><div class="v" id="quarterTrap">--</div><div class="l">TRAP KM/H</div></div>
     <div class="tile"><div class="v" id="rolling">--</div><div class="l">60-130 KM/H</div></div>
+  </div>
+  <div class="tiles">
+    <div class="tile"><div class="v" id="maxAccelG">0.00</div><div class="l">MAX G</div></div>
+    <div class="tile"><div class="v" id="maxBrakeG">0.00</div><div class="l">BRAKE G</div></div>
   </div>
   <table id="splits"></table>
 </div>
@@ -132,6 +137,17 @@ static const char DASHBOARD_HTML[] PROGMEM = R"HTML(
   <button id="historyRefreshBtn">Refresh</button>
 </div>
 
+<h2>SETTINGS</h2>
+<div class="row">
+  <span>Performance start:</span>
+  <button id="perfStartBtn">AUTO</button>
+</div>
+<div class="row">
+  <span>Trip start:</span>
+  <button id="tripStartBtn">AUTO</button>
+</div>
+<div class="hint">AUTO arms/starts itself (waits for the car to sit still, then launch). MANUAL waits for the Arm button above (or the 'A' key on-device) before arming/starting -- the actual launch/stop still detects automatically from GPS speed or the G-sensor once armed. Same toggle as the on-device Settings screen ('S' key).</div>
+
 <h2>HOME WIFI AUTO-UPLOAD (optional)</h2>
 <input id="syncSsid" placeholder="Home WiFi SSID">
 <input id="syncPassword" type="password" placeholder="Home WiFi password">
@@ -164,6 +180,11 @@ const routeCtx = routeCanvas.getContext('2d');
 const perfPanel = document.getElementById('perfPanel');
 const tripPanel = document.getElementById('tripPanel');
 const modeBtn = document.getElementById('modeBtn');
+const armBtn = document.getElementById('armBtn');
+const maxAccelGEl = document.getElementById('maxAccelG');
+const maxBrakeGEl = document.getElementById('maxBrakeG');
+const perfStartBtn = document.getElementById('perfStartBtn');
+const tripStartBtn = document.getElementById('tripStartBtn');
 const dlPerf = document.getElementById('dlPerf');
 const dlPerfReport = document.getElementById('dlPerfReport');
 const dlTripKml = document.getElementById('dlTripKml');
@@ -267,6 +288,23 @@ function renderSplits(splits) {
 }
 
 modeBtn.onclick = () => fetch('/api/mode', { method: 'POST' });
+armBtn.onclick = () => fetch(currentMode === 'TRIP' ? '/api/trip/toggle' : '/api/perf/arm', { method: 'POST' });
+
+function loadSettings() {
+  fetch('/api/settings').then(r => r.json()).then(s => {
+    perfStartBtn.textContent = (s.perfStartMode || 'auto').toUpperCase();
+    tripStartBtn.textContent = (s.tripStartMode || 'auto').toUpperCase();
+  }).catch(() => {});
+}
+perfStartBtn.onclick = () => {
+  const next = perfStartBtn.textContent === 'AUTO' ? 'manual' : 'auto';
+  fetch('/api/settings?perfStartMode=' + next, { method: 'POST' }).then(loadSettings);
+};
+tripStartBtn.onclick = () => {
+  const next = tripStartBtn.textContent === 'AUTO' ? 'manual' : 'auto';
+  fetch('/api/settings?tripStartMode=' + next, { method: 'POST' }).then(loadSettings);
+};
+loadSettings();
 
 fetch('/api/version').then(r => r.json()).then(v => {
   document.getElementById('versionFooter').textContent =
@@ -330,7 +368,7 @@ function loadPerfHistory() {
     perfHistoryList.innerHTML = runs.map(r => {
       return `<div class="card">
         <div class="t1">${r.name || '(unnamed)'} &middot; 0-60: ${fmtRunTime(r.zeroSixtyMs)}</div>
-        <div class="t2">${fmtStamp(r.startedEpoch)} &middot; 1/4mi ${fmtRunTime(r.quarterMileMs)} &middot; max ${r.maxSpeedKmh.toFixed(1)} km/h</div>
+        <div class="t2">${fmtStamp(r.startedEpoch)} &middot; 1/4mi ${fmtRunTime(r.quarterMileMs)} &middot; max ${r.maxSpeedKmh.toFixed(1)} km/h &middot; ${(+r.maxAccelG || 0).toFixed(2)}G / ${(+r.maxBrakeG || 0).toFixed(2)}G brake</div>
         <div class="t2 fn">${r.file}</div>
         <div class="links">
           <a href="/report/run.html?file=${encodeURIComponent(r.file)}" target="_blank">Report</a>
@@ -390,6 +428,7 @@ function connect() {
       myMapsHint.hidden = !isTrip;
       canvas.hidden = isTrip;
       modeBtn.textContent = isTrip ? 'Switch to Performance' : 'Switch to Trip';
+      armBtn.textContent = isTrip ? 'Start/Stop' : 'Arm';
     }
 
     if (currentMode === 'PERF') {
@@ -403,6 +442,8 @@ function connect() {
       quarterMileEl.textContent = p.quarterMileReached ? (p.quarterMileMs/1000).toFixed(2) + 's' : '--';
       quarterTrapEl.textContent = p.quarterMileReached ? p.quarterMileTrapKmh.toFixed(1) : '--';
       rollingEl.textContent = p.rollingSplitReached ? (p.rollingSplitMs/1000).toFixed(2) + 's' : '--';
+      maxAccelGEl.textContent = p.maxAccelG.toFixed(2);
+      maxBrakeGEl.textContent = p.maxBrakeG.toFixed(2);
       renderSplits(p.splits);
       drawGraph(p.history);
     } else {
@@ -565,6 +606,8 @@ fetch(url).then(r => {
     ['60-130 km/h', meta.rollingSplitMs > 0 ? fmtMs(meta.rollingSplitMs) : '--'],
     ['Max km/h', (+meta.maxSpeedKmh || 0).toFixed(1)],
     ['Distance', ((+meta.distanceM || 0)).toFixed(0) + ' m'],
+    ['Max G', (+meta.maxAccelG || 0).toFixed(2)],
+    ['Brake G', (+meta.maxBrakeG || 0).toFixed(2)],
   ];
   document.getElementById('tiles').innerHTML = tiles.map(([l, v]) =>
     `<div class="tile"><div class="v">${v}</div><div class="l">${l}</div></div>`).join('');
@@ -634,12 +677,17 @@ struct TripExportState {
 	// iterated, since the count was cached) with trip B's anchor.
 	uint32_t anchorEpoch = 0;
 	uint32_t anchorFirstMs = 0;
+	// Snapshotted before streaming starts so the summary pin uses consistent
+	// stats even if the trip keeps recording during the export.
+	float totalDistM = 0;
+	uint32_t totalDurMs = 0;
+	float maxSpeedKmh = 0;
+	String docName; // "<Document><name>" -- set before streaming
 };
 
-static void appendKmlHeader(String &out) {
-	out += F("<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<kml xmlns=\"http://www.opengis.net/kml/2.2\">\n<Document>\n<name>0sixty Trip</name>\n");
-	// Shows up in Google My Maps' layer description, so a shared map carries
-	// the signature too.
+static void appendKmlHeader(String &out, const String &name = "0sixty Trip") {
+	out += F("<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<kml xmlns=\"http://www.opengis.net/kml/2.2\">\n<Document>\n");
+	out += "<name>" + name + "</name>\n";
 	out += String("<description>Recorded with 0sixty v") + FIRMWARE_VERSION + " by " + AUTHOR_NAME + "</description>\n";
 	for (int i = 0; i < TRIP_SPEED_BAND_COUNT; i++) {
 		out += "<Style id=\"band" + String(i) + "\"><LineStyle><color>" + TRIP_SPEED_BANDS[i].kmlColor + "</color><width>4</width></LineStyle></Style>\n";
@@ -648,6 +696,39 @@ static void appendKmlHeader(String &out) {
 	out += F("<Style id=\"stop\"><IconStyle><color>ff00a5ff</color><scale>1.1</scale>"
 	         "<Icon><href>http://maps.google.com/mapfiles/kml/paddle/P.png</href></Icon>"
 	         "</IconStyle></Style>\n");
+	// Summary pin style: yellow star, slightly larger than stop pins.
+	out += F("<Style id=\"summary\"><IconStyle><color>ff00d7ff</color><scale>1.3</scale>"
+	         "<Icon><href>http://maps.google.com/mapfiles/kml/shapes/star.png</href></Icon>"
+	         "</IconStyle></Style>\n");
+}
+
+// Formats seconds as "Xh Ym" (or "Ym Zs" for short trips) for KML labels.
+static String fmtDurKml(uint32_t secs) {
+	uint32_t h = secs / 3600, m = (secs % 3600) / 60, s = secs % 60;
+	char buf[24];
+	if (h > 0)        snprintf(buf, sizeof(buf), "%luh %02um", (unsigned long)h, (unsigned)m);
+	else if (m > 0)   snprintf(buf, sizeof(buf), "%um %02us", (unsigned)m, (unsigned)s);
+	else              snprintf(buf, sizeof(buf), "%us", (unsigned)s);
+	return String(buf);
+}
+
+// Emits a "Trip Summary" pin at (lat, lng). Skipped when coords are 0,0
+// (no GPS fix recorded) or stats are entirely zero (empty trip).
+static void appendKmlSummaryPlacemark(String &out, double lat, double lng,
+                                      float distM, uint32_t durMs, float maxKmh) {
+	if (lat == 0.0 && lng == 0.0) return;
+	if (distM <= 0 && durMs == 0) return;
+	float distKm  = distM / 1000.0f;
+	uint32_t secs = durMs / 1000;
+	float avgKmh  = (secs > 0) ? (distKm / (secs / 3600.0f)) : 0;
+	char desc[160];
+	snprintf(desc, sizeof(desc),
+	         "Distance: %.1f km<br/>Duration: %s<br/>Avg speed: %.0f km/h<br/>Max speed: %.0f km/h",
+	         distKm, fmtDurKml(secs).c_str(), avgKmh, maxKmh);
+	out += String("<Placemark><name>Trip Summary</name><styleUrl>#summary</styleUrl>"
+	              "<description>") + desc + "</description>"
+	       "<Point><coordinates>" + String(lng, 6) + "," + String(lat, 6) + ",0"
+	       "</coordinates></Point></Placemark>\n";
 }
 
 // (v1.4.0 replaced appendKmlPlacemarkOpen/Close -- placemarks are now built
@@ -863,6 +944,18 @@ static void WebServer_handleTripKml(AsyncWebServerRequest *request) {
 		return;
 	}
 	auto state = std::make_shared<TripExportState>();
+	// Snapshot stats before streaming -- the trip may still be recording on
+	// the other core, and we want a consistent summary pin at the end.
+	state->totalDistM  = _tripPtr->distanceM();
+	state->totalDurMs  = _tripPtr->durationMs();
+	state->maxSpeedKmh = _tripPtr->maxSpeedKmh();
+	{
+		float km  = state->totalDistM / 1000.0f;
+		uint32_t s = state->totalDurMs / 1000;
+		char buf[48];
+		snprintf(buf, sizeof(buf), "0sixty Trip \xe2\x80\x94 %.1f km, %s", km, fmtDurKml(s).c_str());
+		state->docName = buf;
+	}
 	AsyncWebServerResponse *response = request->beginChunkedResponse(
 		"application/vnd.google-earth.kml+xml",
 		[state](uint8_t *buffer, size_t maxLen, size_t /*index*/) -> size_t {
@@ -872,12 +965,15 @@ static void WebServer_handleTripKml(AsyncWebServerRequest *request) {
 			state->anchorFirstMs = _tripPtr->firstSampleMs();
 			while (state->carry.length() < maxLen && !state->done) {
 				if (!state->wroteHeader) {
-					appendKmlHeader(state->carry);
+					appendKmlHeader(state->carry, state->docName);
 					state->wroteHeader = true;
 					continue;
 				}
 				if ((int)state->pointIdx >= n) {
 					kmlEmitLeg(state->leg, state->carry); // flush whatever leg is still open
+					appendKmlSummaryPlacemark(state->carry,
+					    state->leg.lastLat, state->leg.lastLng,
+					    state->totalDistM, state->totalDurMs, state->maxSpeedKmh);
 					appendKmlFooter(state->carry);
 					state->done = true;
 					continue;
@@ -1040,6 +1136,10 @@ struct HistoricalKmlState {
 	uint32_t startedEpoch = 0;
 	uint32_t firstMs = 0;
 	bool haveFirstMs = false;
+	// v1.4.3: trip summary stats parsed from the "# ended=..." footer line.
+	float totalDistM = 0;
+	uint32_t totalDurMs = 0;
+	float maxSpeedKmh = 0;
 };
 
 static void processHistoricalLine(HistoricalKmlState *state, const String &line) {
@@ -1048,13 +1148,22 @@ static void processHistoricalLine(HistoricalKmlState *state, const String &line)
 	// Metadata/event comment lines carry the timestamp anchor for the whole
 	// file. Pre-v1.3 files have no startedEpoch, so this simply stays 0.
 	if (line.startsWith("#")) {
-		int at = line.indexOf("startedEpoch=");
-		if (at >= 0) {
-			int valueStart = at + 13; // strlen("startedEpoch=")
-			int comma = line.indexOf(',', valueStart);
-			String v = (comma < 0) ? line.substring(valueStart) : line.substring(valueStart, comma);
-			state->startedEpoch = (uint32_t)v.toInt();
-		}
+		auto parseField = [&](const char *key) -> String {
+			int at = line.indexOf(key);
+			if (at < 0) return "";
+			int vs = at + strlen(key);
+			int comma = line.indexOf(',', vs);
+			return (comma < 0) ? line.substring(vs) : line.substring(vs, comma);
+		};
+		String ep = parseField("startedEpoch=");
+		if (ep.length()) state->startedEpoch = (uint32_t)ep.toInt();
+		// "# ended=...,distanceM=X,durationMs=Y,maxSpeedKmh=Z"
+		String dm = parseField("distanceM=");
+		if (dm.length()) state->totalDistM = dm.toFloat();
+		String dur = parseField("durationMs=");
+		if (dur.length()) state->totalDurMs = (uint32_t)dur.toInt();
+		String ms = parseField("maxSpeedKmh=");
+		if (ms.length()) state->maxSpeedKmh = ms.toFloat();
 		return;
 	}
 	if (line.startsWith("millis,")) return; // the CSV column header
@@ -1136,6 +1245,9 @@ static void WebServer_handleTripHistoryKml(AsyncWebServerRequest *request) {
 					state->lineAccum = "";
 				}
 				kmlEmitLeg(state->leg, state->carry); // flush whatever leg is still open
+				appendKmlSummaryPlacemark(state->carry,
+				    state->leg.lastLat, state->leg.lastLng,
+				    state->totalDistM, state->totalDurMs, state->maxSpeedKmh);
 				appendKmlFooter(state->carry);
 				state->storage->closeTripRead(state->file);
 				state->done = true;
@@ -1197,6 +1309,8 @@ static void WebServer_handleRunsList(AsyncWebServerRequest *request) {
 		o["rollingSplitMs"] = runs[i].rollingSplitMs;
 		o["maxSpeedKmh"] = runs[i].maxSpeedKmh;
 		o["distanceM"] = runs[i].distanceM;
+		o["maxAccelG"] = runs[i].maxAccelG;
+		o["maxBrakeG"] = runs[i].maxBrakeG;
 	}
 	String json;
 	serializeJson(doc, json);
@@ -1210,11 +1324,41 @@ void WebServer::begin() {
 	WiFi.softAP(AP_SSID);
 
 	// Captive portal: any hostname resolves to this device, and any request
-	// that doesn't match a real route below gets redirected to "/" -- the
-	// same minimal pattern used by WiFiManager-style captive portals, and
-	// how iOS/Android/Windows all recognize "this network wants me to open
-	// a browser" and auto-launch one pointed here after the QR-code join.
+	// DNS wildcard: every hostname resolves to 192.168.4.1, so typing any URL
+	// into the browser lands here without needing to know the IP.
 	_dnsServer.start(53, "*", WiFi.softAPIP());
+
+	// Captive-portal connectivity probes -- OS-specific URLs each platform
+	// GETs to decide whether a new WiFi has internet access.  Redirecting
+	// them (the old onNotFound behaviour) made Windows/Chrome/iOS flag the
+	// network as a captive portal and open the dashboard inside a restricted
+	// embedded WebView that blocks WebSocket -- so the page loaded blank.
+	// Returning the expected success response instead makes the OS treat the
+	// network as having internet, so the user's normal browser tab is used
+	// and WebSocket works.  The QR code (Q key on device) and the DNS
+	// wildcard above are still how users get the URL; these just stop the OS
+	// from hijacking the browser before they can use it.
+	auto send204 = [](AsyncWebServerRequest *r){ r->send(204); };
+	_server.on("/generate_204",               HTTP_GET, send204); // Chrome / Android
+	_server.on("/gen_204",                    HTTP_GET, send204);
+	_server.on("/ncsi.txt",                   HTTP_GET, [](AsyncWebServerRequest *r){
+		r->send(200, "text/plain", "Microsoft NCSI"); });         // Windows
+	_server.on("/connecttest.txt",            HTTP_GET, [](AsyncWebServerRequest *r){
+		r->send(200, "text/plain", "Microsoft Connect Test"); });
+	_server.on("/redirect",                   HTTP_GET, [](AsyncWebServerRequest *r){
+		r->redirect("http://www.msftconnecttest.com/redirect"); });
+	_server.on("/hotspot-detect.html",        HTTP_GET, [](AsyncWebServerRequest *r){
+		r->send(200, "text/html",
+		  "<HTML><HEAD><TITLE>Success</TITLE></HEAD><BODY>Success</BODY></HTML>"); }); // Apple
+	_server.on("/library/test/success.html",  HTTP_GET, [](AsyncWebServerRequest *r){
+		r->send(200, "text/html", "Success"); });
+	_server.on("/success.txt",                HTTP_GET, [](AsyncWebServerRequest *r){
+		r->send(200, "text/plain", "success"); });
+	_server.on("/canonical.html",             HTTP_GET, [](AsyncWebServerRequest *r){
+		r->send(200, "text/html",
+		  "<HTML><HEAD><TITLE>Success</TITLE></HEAD><BODY>Success</BODY></HTML>"); });
+
+	// Anything else that isn't a real route: redirect to the dashboard.
 	_server.onNotFound([](AsyncWebServerRequest *request) {
 		request->redirect("http://192.168.4.1/");
 	});
@@ -1238,6 +1382,43 @@ void WebServer::begin() {
 		AppMode next = (current == AppMode::PERFORMANCE) ? AppMode::TRIP : AppMode::PERFORMANCE;
 		Settings::setMode(next);
 		request->send(200, "text/plain", next == AppMode::TRIP ? "TRIP" : "PERF");
+	});
+
+	// v1.5.0: Settings menu, dashboard side. Same toggles as the on-device
+	// 1/2 keys (see main.cpp's settingsMenuActive handling) -- either
+	// surface can be used interchangeably since both just read/write
+	// Settings.
+	_server.on("/api/settings", HTTP_GET, [](AsyncWebServerRequest *request) {
+		JsonDocument doc;
+		doc["perfStartMode"] = (Settings::perfStartMode() == StartMode::MANUAL) ? "manual" : "auto";
+		doc["tripStartMode"] = (Settings::tripStartMode() == StartMode::MANUAL) ? "manual" : "auto";
+		String json;
+		serializeJson(doc, json);
+		request->send(200, "application/json", json);
+	});
+	_server.on("/api/settings", HTTP_POST, [](AsyncWebServerRequest *request) {
+		if (request->hasParam("perfStartMode")) {
+			bool manual = request->getParam("perfStartMode")->value() == "manual";
+			Settings::setPerfStartMode(manual ? StartMode::MANUAL : StartMode::AUTO);
+		}
+		if (request->hasParam("tripStartMode")) {
+			bool manual = request->getParam("tripStartMode")->value() == "manual";
+			Settings::setTripStartMode(manual ? StartMode::MANUAL : StartMode::AUTO);
+		}
+		request->send(200, "text/plain", "OK");
+	});
+
+	// v1.5.0: manual arm (Performance) / manual start-stop (Trip), same
+	// action as the on-device 'A' key -- see PerformanceMode::requestManualArm()
+	// and TripMode::requestManualToggle() for the state-gating each does
+	// internally (both are safe no-ops when not applicable).
+	_server.on("/api/perf/arm", HTTP_POST, [](AsyncWebServerRequest *request) {
+		if (_perfPtr) _perfPtr->requestManualArm();
+		request->send(200, "text/plain", "OK");
+	});
+	_server.on("/api/trip/toggle", HTTP_POST, [](AsyncWebServerRequest *request) {
+		if (_tripPtr) _tripPtr->requestManualToggle(millis());
+		request->send(200, "text/plain", "OK");
 	});
 
 	_server.on("/api/trip/name", HTTP_POST, [](AsyncWebServerRequest *request) {
@@ -1349,6 +1530,8 @@ void WebServer::broadcast(const LiveSample &sample, AppMode mode, const Performa
 	perfObj["quarterMileTrapKmh"] = perf.quarterMileTrapKmh();
 	perfObj["rollingSplitReached"] = perf.rollingSplitReached();
 	perfObj["rollingSplitMs"] = perf.rollingSplitMs();
+	perfObj["maxAccelG"] = perf.maxAccelG();
+	perfObj["maxBrakeG"] = perf.maxBrakeG();
 	perfObj["persisted"] = perf.lastRunPersisted();
 
 	JsonArray splitsArr = perfObj["splits"].to<JsonArray>();

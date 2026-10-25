@@ -47,6 +47,34 @@ tools/
 
 ## Status
 
+**v1.5.0 (2026-10-19)** -- diagnosed a reported "no saved files" issue: runs
+were actually being saved fine, just flooded with junk from GPS jitter
+auto-triggering runs on a stationary device (see CHANGELOG.md). Fixed with a
+new **Manual start mode** (per mode, via a new Settings menu -- `S` key
+on-device or the dashboard's Settings section) that requires an explicit
+arm/start (`A` key or a dashboard button) instead of the automatic hold-timer.
+Also added a G-sensor launch trigger for Performance mode (a run now starts
+on an accelerometer spike or a GPS-speed crossing, whichever's first) and
+peak accelerating/braking G-force per run, shown on the dashboard, in run
+history, and in the printable report.
+
+**v1.4.5 (2026-09-30)** -- captive portal fix: the dashboard loaded blank on
+laptop/Android because `onNotFound` made the OS flag the network as a
+captive portal and open the page inside a restricted WebView that blocks
+WebSocket. Added explicit handlers for the common OS connectivity-probe URLs
+so the OS treats the network as having internet and uses a normal tab.
+
+**v1.4.3 (2026-09-29)** -- KML export now includes a yellow-star "Trip Summary"
+pin at the trip's last GPS point; clicking it in Google My Maps shows total
+distance, duration, average speed, and max speed. The live-trip KML document
+name also shows "0sixty Trip — X km, Yh Zm" so the summary is visible in the
+layer panel without clicking anything. Historical trip exports read the same
+stats from the `# ended=...` line already stored in every trip's CSV file.
+
+**v1.4.2 (2026-09-28)** -- battery voltage + fuel-gauge level logged to serial
+every 5 seconds (`[BAT] voltage=XmV level=X% charging=X`) for diagnosing
+AXP2101 calibration loss after a deep discharge.
+
 **v1.4.1 (2026-09-19)** -- code-review fixes to the v1.4.0 export: stops no
 longer emit a pin *and* a redundant near-zero sliver, a trip's final leg
 can't silently vanish, and both timestamp paths are guarded against
@@ -198,14 +226,16 @@ comes from.)
      below.
    - **Trip mode:** "Download trip (KML)" -- opens directly in
      [Google My Maps](https://mymaps.google.com) (Import -> pick the file),
-     drawn as labelled driving legs colored by speed band (v1.4.0 -- a band
-     change has to persist before it splits a leg, so each leg is a real
-     stretch of driving, not a one-point sliver, and its name shows the real
-     time range, distance and average speed rather than just a band name; a
-     stop of 2+ minutes drops its own labelled pin; see MANUAL.md's "The
-     dashboard" section for what the exported map looks like, and
-     `TRIP_SPEED_BANDS` in `config.h` for the band colors; the on-device
-     screen no longer shows a matching legend, see "On-device UI" below).
+     drawn as labelled driving legs colored by speed band. A band change has
+     to persist before it splits a leg (v1.4.0), so each leg is a real
+     stretch of driving labelled with its time range, distance and average
+     speed. A stop of 2+ minutes drops a labelled pin. The KML document name
+     shows the trip's total distance and duration (e.g. "0sixty Trip — 123.4
+     km, 2h 34m") visible in the layer panel without clicking (v1.4.3). A
+     yellow-star "Trip Summary" pin at the final GPS point gives full stats
+     (distance, duration, avg and max speed) in a tap-to-open popup (v1.4.3).
+     See MANUAL.md's "The dashboard" section, and `TRIP_SPEED_BANDS` in
+     `config.h` for the band colors.
      Download it, then
      **disconnect from the tracker's WiFi and open mymaps.google.com
      yourself** in your phone's normal browser to import it -- v1.1 used to

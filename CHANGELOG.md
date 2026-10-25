@@ -1,5 +1,89 @@
 # Changelog
 
+## v1.5.0 (2026-10-19)
+
+### Fixed
+
+- **Diagnosed the "no saved files" report.** Runs *are* being saved to SD
+  (`/runs/run*.csv`, confirmed via `/api/runs`) -- the real problem was 40+
+  junk runs logged in a few minutes while the device sat stationary on a
+  desk: GPS speed jitter (the live NMEA stream was reporting `ANTENNA OPEN`
+  at the time -- a loose/flaky antenna connection, which degrades fix
+  quality) was enough to repeatedly cross `PERF_ARM_SPEED_KMH`/
+  `PERF_TRIGGER_SPEED_KMH` with the car never actually moving. All of them
+  show `zeroSixtyMs`/`quarterMileMs`/`rollingSplitMs` as 0 because no run
+  ever reached a real launch speed, not because split-timing is broken.
+
+### Added
+
+- **Manual start mode**, per mode (Performance/Trip), toggled from a new
+  Settings menu (on-device: `S` key, numbered `1`/`2` toggles; dashboard: a
+  new Settings section) and persisted like every other preference. AUTO
+  keeps the original hands-off behavior; MANUAL waits for the `A` key (or a
+  new dashboard Arm/Start-Stop button) before arming (Performance) or
+  starting/stopping (Trip) -- this is the actual fix for the false-trigger
+  flood above, since a stationary device in Manual mode never auto-arms.
+  The *launch*/stop-of-timer detection itself (GPS speed or G-sensor
+  crossing its threshold) is unchanged and still automatic in both modes --
+  Manual only gates arming.
+- **G-sensor launch trigger for Performance mode.** A run now also starts on
+  a forward accelerometer spike (`PERF_TRIGGER_ACCEL_G`), not just a GPS/
+  fused-speed crossing -- whichever happens first. Reacts faster than
+  waiting on GPS (the accelerometer samples far more often), and gives
+  Manual mode a second, independent way to detect the actual launch.
+- **Peak accelerating/braking G-force per Performance run** (`maxAccelG`/
+  `maxBrakeG`, both positive magnitudes), tracked from the same calibrated
+  forward axis used for the existing live accelG readout. Shown as two new
+  dashboard tiles, in the run history list, in the printable report, and
+  stamped into every saved run's CSV metadata.
+- New dashboard controls: an **Arm** / **Start/Stop** button (renames itself
+  per mode) next to the mode switcher, and a **Settings** section with the
+  two start-mode toggles -- mirrors the on-device controls, either surface
+  works interchangeably.
+
+## v1.4.5 (2026-09-30)
+
+### Fixed
+
+- **Dashboard loads blank on laptop and Android.** The `onNotFound` redirect
+  made Windows/Chrome/iOS flag the network as a captive portal and open the
+  dashboard inside a restricted embedded WebView that blocks WebSocket -- so
+  the live data never arrived and the page appeared blank. Added explicit
+  handlers for all common OS connectivity probe URLs (`/generate_204`,
+  `/ncsi.txt`, `/connecttest.txt`, `/hotspot-detect.html`, etc.) that return
+  the expected success response. The OS now treats the network as having
+  internet, uses the user's normal browser tab, and WebSocket works.
+
+## v1.4.4 (2026-09-29)
+
+### Fixed
+
+- **KML summary pin description was one run-on line in Google My Maps.** `&#10;`
+  (XML numeric character reference for LF) is collapsed to whitespace by My Maps'
+  HTML renderer. Replaced with `<br/>` — the correct HTML line break in KML
+  description content, per Google's own KML documentation examples.
+
+## v1.4.3 (2026-09-29)
+
+### Added
+
+- **KML trip summary pin** — a yellow star at the trip's last GPS point. Click
+  it in Google My Maps to see total distance, duration, average speed, and max speed.
+- **KML document name shows total distance + duration** for live trips
+  (e.g. "0sixty Trip — 123.4 km, 2h 34m") — visible directly in the My Maps
+  layer panel without clicking anything.
+- Both the live `/download/trip.kml` and historical `/download/trip-history.kml`
+  exports include the summary pin; historical trips read `distanceM`, `durationMs`,
+  and `maxSpeedKmh` from the `# ended=...` metadata line already in the CSV file.
+
+## v1.4.2 (2026-09-28)
+
+### Added
+
+- **Battery voltage logged to serial every 5 seconds** (`[BAT] voltage=Xmv level=X% charging=X`).
+  Useful for diagnosing AXP2101 fuel-gauge calibration loss after a deep discharge, where
+  `getBatteryLevel()` returns 0% despite a real charge being present.
+
 ## v1.4.1 (2026-09-19)
 
 Independent code review of the v1.4.0 KML rework, before any of it had been

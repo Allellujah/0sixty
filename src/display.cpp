@@ -113,7 +113,12 @@ void Display::showStatus(bool gpsHasFix, uint32_t satellites, float fusedSpeedKm
 
 void Display::showPerformance(const PerformanceMode &perf, bool gpsHasFix, uint32_t satellites) {
 	int top, bottom;
-	drawChrome("PERF", gpsHasFix, satellites, "M:mode C:color U:unit Q:qr N:name", top, bottom);
+	// v1.5.0: swapped C:color/U:unit out of the footer to make room for
+	// A:arm/S:set (240px at textSize(1) doesn't fit all of them at once) --
+	// those two still work via the keyboard, just aren't listed here; theme/
+	// unit are a once-and-forget preference, arm/settings are the newer,
+	// less-discoverable controls that need the reminder more.
+	drawChrome("PERF", gpsHasFix, satellites, "M:mode A:arm S:set Q:qr N:name", top, bottom);
 
 	ThemePalette pal = themeFor(Settings::theme());
 	_canvas.setTextColor(pal.fg, pal.bg);
@@ -186,7 +191,8 @@ static float clampDisplaySpeed(float speedKmh) {
 
 void Display::showTrip(const TripMode &trip, bool gpsHasFix, uint32_t satellites, float liveSpeedKmh) {
 	int top, bottom;
-	drawChrome("TRIP", gpsHasFix, satellites, "M:mode U:unit X:reset Q:qr N:name", top, bottom);
+	// v1.5.0: see showPerformance()'s comment -- U:unit dropped to fit A:go.
+	drawChrome("TRIP", gpsHasFix, satellites, "M:mode A:go X:reset Q:qr N:name", top, bottom);
 
 	ThemePalette pal = themeFor(Settings::theme());
 	_canvas.setTextColor(pal.fg, pal.bg);
@@ -346,6 +352,32 @@ void Display::showNameEntry(const char *title, const String &buffer) {
 	_canvas.printf("%d/%d chars\n", (int)buffer.length(), TRIP_NAME_MAX_LEN);
 	nextLine(_canvas, 4);
 	_canvas.printf("Letters/digits/-/_ only\n");
+
+	_canvas.pushSprite(&M5Cardputer.Display, 0, 0);
+}
+
+// v1.5.0: Settings menu -- see main.cpp's settingsMenuActive comment for why
+// this is a numbered list rather than arrow-key navigation.
+void Display::showSettingsMenu(StartMode perfStartMode, StartMode tripStartMode) {
+	int top, bottom;
+	drawChrome("SETTINGS", false, 0, "1/2:toggle  `:back", top, bottom);
+
+	ThemePalette pal = themeFor(Settings::theme());
+	_canvas.setTextColor(pal.fg, pal.bg);
+	_canvas.setTextDatum(top_left);
+
+	_canvas.setTextSize(2);
+	_canvas.setCursor(4, top);
+	_canvas.printf("1) Perf start: %s\n", perfStartMode == StartMode::AUTO ? "AUTO" : "MANUAL");
+	nextLine(_canvas, 4);
+	_canvas.printf("2) Trip start: %s\n", tripStartMode == StartMode::AUTO ? "AUTO" : "MANUAL");
+
+	_canvas.setTextSize(1);
+	nextLine(_canvas, 4);
+	_canvas.setCursor(4, _canvas.getCursorY() + 10); // blank spacer before the explanation
+	_canvas.println("AUTO: arms/starts itself.");
+	nextLine(_canvas, 4);
+	_canvas.println("MANUAL: press A to arm/start.");
 
 	_canvas.pushSprite(&M5Cardputer.Display, 0, 0);
 }

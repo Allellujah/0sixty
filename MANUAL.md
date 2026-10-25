@@ -1,4 +1,4 @@
-# 0sixty -- User Manual (v1.4.1)
+# 0sixty -- User Manual (v1.5.0)
 
 *by Allelujah*
 
@@ -33,12 +33,29 @@ flip between them. Same firmware, no reflashing.
 
 ### Performance mode ("0sixty")
 
-Auto-armed: come to a stop, wait a moment, and the device arms itself. Launch
-and it starts timing automatically -- no button to press mid-run.
+Two ways to arm, switchable any time from the Settings menu (**`S`** key, or
+the dashboard's Settings section -- see below):
+
+- **Auto** (default): come to a stop, wait a moment, and the device arms
+  itself.
+- **Manual**: nothing arms on its own -- press **`A`** (or the dashboard's
+  **Arm** button) when you're ready.
+
+Either way, once armed, the run itself still starts automatically: launch and
+it starts timing the instant GPS speed **or the accelerometer** crosses its
+threshold, whichever happens first -- no button to press mid-run. Manual
+mode exists because real-world testing showed Auto can mis-fire: with the
+device just sitting stationary, ordinary GPS speed jitter (worse with a
+marginal antenna connection) can repeatedly cross the auto-arm/trigger
+thresholds and log a flood of meaningless sub-second "runs". If you see a lot
+of near-zero-distance runs in your history, that's what happened -- switch to
+Manual and only arm right before you actually mean to launch.
 
 - **0-10 through 0-100 km/h splits**, a **quarter-mile time + trap speed**,
-  and a **60-130 km/h rolling split** (time between crossing 60 and crossing
-  130, wherever that happens in the run) -- all shown on the phone dashboard.
+  a **60-130 km/h rolling split** (time between crossing 60 and crossing
+  130, wherever that happens in the run), and **peak accelerating/braking
+  G-force** (from the onboard accelerometer) -- all shown on the phone
+  dashboard.
 - The device's own small screen shows state, elapsed time, distance, the
   0-60 split, and a live speed sparkline.
 - A run ends when it reaches target speed, drops back off, or after 60
@@ -56,12 +73,15 @@ and it starts timing automatically -- no button to press mid-run.
 
 ### Trip mode (GPS tracker)
 
-No button to start or stop a drive -- it's automatic:
+Same Auto/Manual choice as Performance mode, in the same Settings menu:
 
-- **Starts recording** once you've been moving faster than ~5 km/h for 5
-  seconds straight.
-- **Stops and saves** once you've been at or below ~3 km/h for 3 minutes
-  straight (i.e. actually parked, not just stopped at a light).
+- **Auto** (default): starts recording once you've been moving faster than
+  ~5 km/h for 5 seconds straight, and stops and saves once you've been at or
+  below ~3 km/h for 3 minutes straight (i.e. actually parked, not just
+  stopped at a light).
+- **Manual**: press **`A`** (or the dashboard's **Start/Stop** button) to
+  start recording right now, and again to stop and save. Works as a quick
+  override in Auto mode too, if you don't want to wait out the hold timers.
 - When it stops, the device shows a **trip summary screen** (name, distance,
   duration, max speed, "saved to SD"). Press **`X`** to dismiss it and arm
   for the next trip.
@@ -105,13 +125,22 @@ quiet).
   coloured by speed band and labelled with its real time range, distance and
   average speed (`08:12-08:47  32.4 km  87 km/h avg`), with avg/max speed in
   the description when you click it. Stops of more than a couple of minutes
-  appear as their own pins (`Stopped 09:02-09:18 (16 min)`). Opening the
-  same file in Google Earth instead will animate the drive along its
-  timeline, since each leg carries a timestamp range.
+  appear as their own pins (`Stopped 09:02-09:18 (16 min)`). The layer panel
+  shows the trip's **total distance and duration** in the layer name (e.g.
+  "0sixty Trip — 123.4 km, 2h 34m") -- visible at a glance without clicking
+  anything. A **yellow-star "Trip Summary" pin** at the last GPS point gives
+  full totals (distance, duration, avg speed, max speed) in a tap-to-open
+  popup. Opening the same file in Google Earth instead will animate the drive
+  along its timeline, since each leg carries a timestamp range.
   Don't expect a link on this page to still work after disconnecting -- the
   QR-code join opens the dashboard inside a temporary "sign in to network"
   view that Android closes the moment you disconnect, confirmed on real
   hardware.
+- **Settings**: the same Auto/Manual start-mode toggles as the on-device
+  Settings menu (`S` key) -- either surface works, they stay in sync. An
+  **Arm** / **Start/Stop** button next to the mode switcher does the same
+  thing as the on-device `A` key, useful for arming from your phone without
+  reaching for the keyboard.
 - **Home WiFi Auto-Upload** (optional, off by default): enter your home
   WiFi's SSID/password and an upload URL, and the device will try to push
   any not-yet-uploaded trip file there whenever it's parked near that
@@ -129,9 +158,13 @@ quiet).
 | `X` | Trip mode: dismiss the summary screen / force-end and save the current trip |
 | `Q` | Show/hide the WiFi-join QR code |
 | `N` | Name the next trip or run, typed on the device (Enter saves, Del backspaces, `` ` `` cancels) |
+| `A` | Manual arm (Performance) / manual start-stop (Trip) -- only needed day-to-day in Manual start mode, but works as a quick override in Auto too |
+| `S` | Open/close the Settings menu: Performance/Trip start mode (Auto/Manual), toggled with `1`/`2`, `` ` `` to close |
 
-Theme, mode, and unit persist across power cycles. The footer at the bottom
-of every screen always lists the keys that work on that screen.
+Theme, mode, unit, and the two start-mode settings all persist across power
+cycles. The footer at the bottom of every screen lists most of the keys that
+work on that screen (`C`/`U` aren't listed on the Performance/Trip screens
+themselves to make room for `A`/`S`, but still work).
 
 ## Battery
 
@@ -154,7 +187,7 @@ of every screen always lists the keys that work on that screen.
   openable in any spreadsheet or text editor (lines starting with `#` are
   metadata/event comments, not data rows).
 
-## Known rough edges (v1.4.1)
+## Known rough edges (v1.5.0)
 
 See `CHANGELOG.md`'s "Known limitations" section for each version --
 notably: auto trip start/stop timing, the hard-event threshold, and home
@@ -169,3 +202,12 @@ Recordings started before the session's first GPS fix carry no date (see
 "Dates and times" above). Everything saved before v1.3.0 also predates
 dates and names entirely -- those files still list and download correctly,
 they just show "no date" and "(unnamed)".
+
+Manual start mode and the G-sensor launch trigger (v1.5.0) are confirmed
+compiling and boot-tested, but not yet validated against a real drive --
+`PERF_TRIGGER_ACCEL_G` (config.h) is a first guess at how hard a "launch"
+push needs to be, same caveat as the other first-pass thresholds above.
+Peak accel/brake G is recorded from the same single-axis forward
+calibration the rest of Performance mode uses, so it only reads correctly
+once the device has calibrated (a real push/launch locks the forward axis --
+see README.md's IMU section).

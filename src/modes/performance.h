@@ -59,6 +59,23 @@ public:
 	const HistoryPoint *history() const { return _history; }
 	int historyCount() const { return _historyCount; }
 
+	// v1.5.0: peak forward (accelerating) and peak rearward (braking)
+	// G-force seen during RUNNING, both reported as positive magnitudes.
+	// Frozen at FINISHED the same way every other stat here is -- see
+	// resetRun()'s comment for why these aren't cleared until the *next*
+	// run actually starts.
+	float maxAccelG() const { return _maxAccelG; }
+	float maxBrakeG() const { return _maxBrakeG; }
+
+	// v1.5.0: manual arm, for Settings::perfStartMode() == StartMode::MANUAL
+	// (bound to the 'A' key in main.cpp and a dashboard button). Works from
+	// either waiting state (IDLE_WAIT at boot, or FINISHED after a previous
+	// run) regardless of the stationary-hold timer auto-arm normally waits
+	// on. No-op from ARMED/RUNNING (already armed/running). The actual
+	// launch trigger (GPS speed or G-sensor crossing its threshold, see
+	// update()) is unchanged -- this only skips the *arming* wait.
+	void requestManualArm();
+
 	// v1.1: quarter mile trap (time + speed at QUARTER_MILE_M from launch,
 	// same launch reference as the 0-X splits) and the 60-130 rolling split
 	// (time between first crossing 60 and first crossing 130 within the same
@@ -119,6 +136,8 @@ private:
 	// Frozen once, at the RUNNING->FINISHED transition, same moment
 	// everything else is finalized.
 	float _frozenSlopePercent = 0.0f;
+	float _maxAccelG = 0.0f;
+	float _maxBrakeG = 0.0f;
 	float _lastSpeedKmh = 0.0f;
 	uint32_t _lastSampleMs = 0;
 	uint32_t _lastHistoryMs = 0;

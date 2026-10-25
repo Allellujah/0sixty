@@ -10,7 +10,7 @@
 // it's visible without opening this file, and read by tools/merge_bin.sh
 // to name build artifacts -- keep this the single source of truth, don't
 // hardcode the version anywhere else.
-constexpr const char *FIRMWARE_VERSION = "1.4.1";
+constexpr const char *FIRMWARE_VERSION = "1.5.0";
 
 // Author/signature, shown on the boot splash, the serial banner, the
 // dashboard footer, the printable report, and stamped into every exported
@@ -106,6 +106,13 @@ constexpr int PERF_SPLIT_COUNT = 10;
 constexpr float PERF_ARM_SPEED_KMH = 2.0f;    // below this = "stopped" for arming
 constexpr uint32_t PERF_ARM_HOLD_MS = 500;    // how long it must stay stopped to (re-)arm
 constexpr float PERF_TRIGGER_SPEED_KMH = 3.0f; // sustained past this = a run has started
+// v1.5.0: a forward G-force spike past this, sustained for the same
+// PERF_TRIGGER_HOLD_MS debounce as the GPS-speed trigger, also counts as "a
+// run has started" -- reacts faster than waiting for GPS/fused speed to
+// cross PERF_TRIGGER_SPEED_KMH (the accelerometer samples far faster than
+// GPS updates), and gives Manual start mode a second, independent way to
+// detect the actual launch once armed. Either condition alone is enough.
+constexpr float PERF_TRIGGER_ACCEL_G = 0.25f;
 constexpr uint32_t PERF_TRIGGER_HOLD_MS = 100; // debounce so GPS/IMU noise can't false-trigger
 // v1.1: raised from 105/30000 so a run doesn't auto-end before reaching the
 // new 60-130 rolling split or a quarter-mile trap speed, both of which can

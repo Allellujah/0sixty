@@ -33,6 +33,8 @@ void PerformanceMode::resetRun() {
 	_rollingLowMs = 0;
 	_rollingHighMs = 0;
 	_frozenSlopePercent = 0.0f;
+	_maxAccelG = 0.0f;
+	_maxBrakeG = 0.0f;
 	_persistedToSd = false;
 	// _currentName/_startedEpoch are deliberately NOT cleared here: they're
 	// set together with the new run's id immediately after this call, and
@@ -82,7 +84,9 @@ String PerformanceMode::toCsv() const {
 	       ",quarterMileTrapKmh=" + String(_quarterMileTrapKmh, 1) +
 	       ",rollingSplitMs=" + String(rollingSplitMs()) +
 	       ",maxSpeedKmh=" + String(_maxSpeedKmh, 1) +
-	       ",distanceM=" + String(_distanceM, 1) + "\n";
+	       ",distanceM=" + String(_distanceM, 1) +
+	       ",maxAccelG=" + String(_maxAccelG, 2) +
+	       ",maxBrakeG=" + String(_maxBrakeG, 2) + "\n";
 
 	out += "elapsedMs,speedKmh,altitudeM,accelG\n";
 	for (int i = 0; i < _historyCount; i++) {
@@ -111,7 +115,11 @@ void PerformanceMode::update(float speedKmh, float altitudeM, float accelG, uint
 	_lastSpeedKmh = speedKmh;
 
 	bool belowArm = speedKmh < PERF_ARM_SPEED_KMH;
-	bool aboveTrigger = speedKmh > PERF_TRIGGER_SPEED_KMH;
+	// v1.5.0: a run also starts on a forward G-force spike, not just a GPS/
+	// fused-speed crossing -- whichever gets there first. See config.h's
+	// PERF_TRIGGER_ACCEL_G comment for why (accelerometer reacts faster than
+	// GPS, and it's a second, independent signal for Manual start mode).
+	bool aboveTrigger = (speedKmh > PERF_TRIGGER_SPEED_KMH) || (accelG > PERF_TRIGGER_ACCEL_G);
 	uint32_t dtMs = (dt > 0.0f && dt < 2.0f) ? (uint32_t)(dt * 1000.0f) : 0;
 
 	_belowArmSpeedMs = belowArm ? (_belowArmSpeedMs + dtMs) : 0;
@@ -122,7 +130,16 @@ void PerformanceMode::update(float speedKmh, float altitudeM, float accelG, uint
 		// Only reached once, at boot, before any run has ever happened --
 		// nothing to preserve yet, so resetRun() here is harmless (all
 		// zeros already) rather than load-bearing.
-		if (_belowArmSpeedMs >= PERF_ARM_HOLD_MS) {
+		//
+		// v1.5.0: the automatic "sat still long enough, arm" transition only
+		// fires in AUTO start mode. In MANUAL, nothing arms until the user
+		// presses the Arm key/button (requestManualArm()) -- found necessary
+		// after real-world use: with the device just sitting stationary
+		// (e.g. plugged in on a desk), ordinary GPS speed jitter (worse with
+		// a marginal antenna connection) was enough to repeatedly cross
+		// PERF_ARM_SPEED_KMH/PERF_TRIGGER_SPEED_KMH and produce a flood of
+		// meaningless sub-second "runs".
+		if (Settings::perfStartMode() == StartMode::AUTO && _belowArmSpeedMs >= PERF_ARM_HOLD_MS) {
 			_startAltitudeM = altitudeM;
 			_state = RunState::ARMED;
 		}
@@ -152,6 +169,11 @@ void PerformanceMode::update(float speedKmh, float altitudeM, float accelG, uint
 			_distanceM += (speedKmh / 3.6f) * dt;
 		}
 		if (speedKmh > _maxSpeedKmh) _maxSpeedKmh = speedKmh;
+		// v1.5.0: peak accelerating/braking G, both tracked as positive
+		// magnitudes -- accelG is signed on the calibrated forward axis
+		// (positive = accelerating, negative = braking/deceleration).
+		if (accelG > _maxAccelG) _maxAccelG = accelG;
+		if (-accelG > _maxBrakeG) _maxBrakeG = -accelG;
 		_elapsedMs = nowMs - _runStartMs;
 
 		for (int i = 0; i < PERF_SPLIT_COUNT; i++) {
@@ -197,10 +219,20 @@ void PerformanceMode::update(float speedKmh, float altitudeM, float accelG, uint
 		// above for why. Re-arming quietly in the background is fine; the
 		// displayed results (distance/splits/quarter mile/etc.) stay frozen
 		// and correct through this whole waiting period.
-		if (_belowArmSpeedMs >= PERF_ARM_HOLD_MS) {
+		// v1.5.0: same AUTO-only gating as IDLE_WAIT above.
+		if (Settings::perfStartMode() == StartMode::AUTO && _belowArmSpeedMs >= PERF_ARM_HOLD_MS) {
 			_startAltitudeM = altitudeM;
 			_state = RunState::ARMED;
 		}
 		break;
 	}
+}
+
+void PerformanceMode::requestManualArm() {
+	// Only from a waiting state -- already ARMED/RUNNING has nothing to do,
+	// and re-entering ARMED mid-run would wipe an in-progress run's state.
+	if (_state != RunState::IDLE_WAIT && _state != RunState::FINISHED) return;
+	_startAltitudeM = _lastAltitudeM;
+	_belowArmSpeedMs = 0;
+	_state = RunState::ARMED;
 }

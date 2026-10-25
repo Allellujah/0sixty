@@ -8,6 +8,18 @@
 
 enum class AppMode { PERFORMANCE, TRIP };
 
+// v1.5.0: per-mode start behavior. AUTO is the original hands-off design
+// (Performance auto-arms after sitting still, Trip auto-starts/stops on
+// sustained speed). MANUAL requires a keypress/dashboard button to arm
+// (Performance) or start/stop (Trip) instead of the automatic hold-timer --
+// added after real-world use showed GPS speed jitter while stationary (e.g.
+// a flaky antenna connection) can repeatedly cross the auto-arm/trigger
+// thresholds with the device just sitting on a desk, producing a flood of
+// meaningless sub-second "runs". The actual launch/stop-of-timer detection
+// (GPS speed or G-sensor crossing its own threshold) still runs the same way
+// in both modes -- MANUAL only gates *arming*, not *triggering*.
+enum class StartMode { AUTO, MANUAL };
+
 // Persists the user-facing preferences (theme color, speed unit, active
 // mode) across reboots/power loss via the ESP32's NVS flash (Preferences
 // library). Loaded once at boot; each setter writes through immediately --
@@ -23,10 +35,14 @@ public:
 
 	static ThemeColor theme() { return _theme; }
 	static AppMode mode() { return _mode; }
+	static StartMode perfStartMode() { return _perfStartMode; }
+	static StartMode tripStartMode() { return _tripStartMode; }
 
 	static void setTheme(ThemeColor t);
 	static void setMode(AppMode m);
 	static void toggleUnit(); // wraps Units::toggle() and persists the result
+	static void setPerfStartMode(StartMode m);
+	static void setTripStartMode(StartMode m);
 
 	// Returns the next trip ID and persists the incremented counter --
 	// each call consumes one ID, so only call this when a trip actually starts.
@@ -62,6 +78,8 @@ public:
 private:
 	static ThemeColor _theme;
 	static AppMode _mode;
+	static StartMode _perfStartMode;
+	static StartMode _tripStartMode;
 	static String _pendingTripName;
 	static String _pendingRunName;
 	static String _homeSsid;

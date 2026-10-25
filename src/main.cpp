@@ -27,6 +27,11 @@
 //   X -- reset the current trip log (Trip mode only)
 //   Q -- show/hide the WiFi-join QR code (any mode)
 //   N -- name the next trip/run, typed on the device (v1.3.0)
+//   A -- manual arm (Performance) / manual start-stop (Trip) (v1.5.0) --
+//        only does anything useful day-to-day in Manual start mode (see S
+//        below), but works as a quick override in Auto mode too
+//   S -- open/close the Settings menu (v1.5.0): Performance/Trip start mode
+//        (Auto/Manual), numbered, toggled with the 1/2 keys
 // All preferences persist across reboots (Settings, NVS-backed).
 
 static GpsReader gps;
@@ -41,6 +46,7 @@ static TripMode trip;
 static uint32_t lastDisplayMs = 0;
 static uint32_t lastLogMs = 0;
 static uint32_t lastBroadcastMs = 0;
+static uint32_t lastBatteryLogMs = 0;
 static constexpr uint32_t DISPLAY_INTERVAL_MS = 250;
 static constexpr uint32_t LOG_INTERVAL_MS = 100; // ~10Hz cap, matches GNSS's max rate once configured
 
@@ -51,6 +57,13 @@ static bool lowBatteryDimmed = false;
 // instead of firing single-key actions -- see handleKeyboard().
 static bool nameEntryActive = false;
 static String nameEntryBuffer;
+
+// v1.5.0 on-device Settings menu (S key). Simple numbered toggle list rather
+// than arrow-key navigation -- the Cardputer ADV has no dedicated arrow
+// keys, and a numbered list scales fine for the handful of settings this
+// project actually has. Extend by adding another number case in
+// handleKeyboard() and another line in Display::showSettingsMenu().
+static bool settingsMenuActive = false;
 
 void setup() {
 	Serial.begin(115200); // raw GPS NMEA passthrough for live debugging, see gps.cpp
@@ -126,6 +139,16 @@ static void applyKeyAction(char c) {
 				: Settings::peekPendingRunName();
 			nameEntryActive = true;
 			break;
+		case 'a':
+			// Context-sensitive: whichever mode is actually active. Each
+			// mode's own method already no-ops when it isn't in a state
+			// where this makes sense (e.g. Performance already RUNNING).
+			if (Settings::mode() == AppMode::PERFORMANCE) perf.requestManualArm();
+			else trip.requestManualToggle(millis());
+			break;
+		case 's':
+			settingsMenuActive = true;
+			break;
 	}
 }
 
@@ -199,20 +222,41 @@ static void handleKeyboard() {
 		prevDel = status.del;
 		return;
 	}
+
+	// v1.5.0: while the Settings menu is up, digit keys toggle settings
+	// instead of firing the normal single-key actions -- same reasoning as
+	// the name-entry modal above (a stray M/C/U/etc. while browsing settings
+	// shouldn't also switch modes or cycle the theme).
+	if (settingsMenuActive) {
+		for (char c : word) {
+			if (prevWord.indexOf(c) >= 0) continue; // already held, not a fresh press
+			if (c == '1') {
+				Settings::setPerfStartMode(Settings::perfStartMode() == StartMode::AUTO ? StartMode::MANUAL : StartMode::AUTO);
+			} else if (c == '2') {
+				Settings::setTripStartMode(Settings::tripStartMode() == StartMode::AUTO ? StartMode::MANUAL : StartMode::AUTO);
+			} else if (c == '`' || c == 's') {
+				settingsMenuActive = false;
+			}
+		}
+		prevWord = word;
+		prevEnter = status.enter;
+		prevDel = status.del;
+		return;
+	}
+
 	prevEnter = status.enter;
 	prevDel = status.del;
 
 	for (char c : word) {
 		if (prevWord.indexOf(c) < 0) applyKeyAction(c);
-		// applyKeyAction('n') opens the name-entry modal mid-loop. The
-		// modal check at the top of this function already ran for this
-		// frame, so without bailing out here any *other* key pressed in the
-		// same scan would still be dispatched as a normal action -- e.g.
-		// N+X in Trip mode would open the naming screen and simultaneously
-		// end the recording in progress. Remaining keys this frame are
-		// swallowed deliberately; prevWord below still records them, so
-		// they don't re-fire once released.
-		if (nameEntryActive) break;
+		// applyKeyAction('n')/('s') opens a modal mid-loop. The modal checks
+		// above already ran for this frame, so without bailing out here any
+		// *other* key pressed in the same scan would still be dispatched as
+		// a normal action -- e.g. N+X in Trip mode would open the naming
+		// screen and simultaneously end the recording in progress. Remaining
+		// keys this frame are swallowed deliberately; prevWord below still
+		// records them, so they don't re-fire once released.
+		if (nameEntryActive || settingsMenuActive) break;
 	}
 	prevWord = word;
 }
@@ -302,6 +346,8 @@ void loop() {
 
 		if (nameEntryActive) {
 			display.showNameEntry(mode == AppMode::TRIP ? "NAME TRIP" : "NAME RUN", nameEntryBuffer);
+		} else if (settingsMenuActive) {
+			display.showSettingsMenu(Settings::perfStartMode(), Settings::tripStartMode());
 		} else if (qrVisible) {
 			display.showQr(AP_SSID);
 		} else if (mode == AppMode::TRIP) {
@@ -315,6 +361,14 @@ void loop() {
 		} else {
 			display.showPerformance(perf, gps.hasFix(), gps.satellites());
 		}
+	}
+
+	if (now - lastBatteryLogMs >= 5000) {
+		lastBatteryLogMs = now;
+		int32_t mv  = M5Cardputer.Power.getBatteryVoltage();
+		int32_t pct = M5Cardputer.Power.getBatteryLevel();
+		bool chg    = M5Cardputer.Power.isCharging() == M5Cardputer.Power.is_charging;
+		Serial.printf("[BAT] voltage=%dmV level=%d%% charging=%d\n", (int)mv, (int)pct, chg ? 1 : 0);
 	}
 
 	if (now - lastBroadcastMs >= WS_BROADCAST_INTERVAL_MS) {

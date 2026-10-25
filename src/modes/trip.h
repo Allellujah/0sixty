@@ -68,6 +68,14 @@ public:
 	// it. Not needed on entry, only exit: begin()/reset() already zero these.
 	void onModeExit();
 
+	// v1.5.0: manual start/stop, for Settings::tripStartMode() ==
+	// StartMode::MANUAL (bound to the 'A' key in main.cpp and a dashboard
+	// button) -- also usable as a quick override in AUTO mode (e.g. start
+	// recording immediately rather than waiting out AUTO_TRIP_START_HOLD_MS).
+	// IDLE -> start recording now; RECORDING -> stop now; no-op from SUMMARY
+	// (use reset() -- the existing X key -- to dismiss that and go IDLE).
+	void requestManualToggle(uint32_t nowMs);
+
 	TripState tripState() const { return _state; }
 
 	// v1.1: whether the trip currently shown in SUMMARY actually made it to

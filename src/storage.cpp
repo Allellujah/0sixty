@@ -465,6 +465,8 @@ int Storage::listRuns(RunSummary *out, int maxCount) {
 			s.rollingSplitMs = findUInt(header, "rollingSplitMs");
 			s.maxSpeedKmh = findFloat(header, "maxSpeedKmh");
 			s.distanceM = findFloat(header, "distanceM");
+			s.maxAccelG = findFloat(header, "maxAccelG"); // absent in pre-v1.5.0 files -> 0
+			s.maxBrakeG = findFloat(header, "maxBrakeG");
 		}
 		f.close();
 	}

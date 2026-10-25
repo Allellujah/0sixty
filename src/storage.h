@@ -36,6 +36,8 @@ struct RunSummary {
 	uint32_t rollingSplitMs = 0;
 	float maxSpeedKmh = 0.0f;
 	float distanceM = 0.0f;
+	float maxAccelG = 0.0f; // v1.5.0, absent (0) in pre-v1.5.0 run files
+	float maxBrakeG = 0.0f;
 };
 
 // v1.3.0: strips anything FAT filenames (or this project's own '#'/','
